@@ -5,6 +5,7 @@ __pycache__/
 .env
 *.pth
 backend/output/
+backend/results/
 backend/*.log
 
 # Next.js
