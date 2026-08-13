@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { Upload, FileCheck } from "lucide-react";
 
@@ -9,7 +9,50 @@ interface Props {
   isProcessing: boolean;
 }
 
+const STEPS = [
+  "Loading CT volume",
+  "Preprocessing",
+  "Running AI inference",
+  "Generating visualizations",
+  "Preparing results",
+];
+
 export default function FileUpload({ onUpload, isProcessing }: Props) {
+  const [progress, setProgress] = useState(0);
+  const [currentStep, setCurrentStep] = useState(0);
+
+  useEffect(() => {
+    if (!isProcessing) {
+      setProgress(0);
+      setCurrentStep(0);
+      return;
+    }
+
+    const duration = 45000; // 45s estimate
+    const interval = 100;
+    const increment = 100 / (duration / interval);
+
+    const timer = setInterval(() => {
+      setProgress((p) => {
+        const next = p + increment;
+        if (next >= 100) {
+          clearInterval(timer);
+          return 100;
+        }
+        return next;
+      });
+    }, interval);
+
+    const stepTimer = setInterval(() => {
+      setCurrentStep((s) => Math.min(s + 1, STEPS.length - 1));
+    }, duration / STEPS.length);
+
+    return () => {
+      clearInterval(timer);
+      clearInterval(stepTimer);
+    };
+  }, [isProcessing]);
+
   const onDrop = useCallback(
     (files: File[]) => {
       if (files[0]) onUpload(files[0]);
@@ -38,24 +81,47 @@ export default function FileUpload({ onUpload, isProcessing }: Props) {
             ? "border-clinical-amber bg-clinical-amber/5"
             : "border-outline-variant hover:border-outline"
         }
-        ${isProcessing ? "pointer-events-none opacity-50" : ""}
+        ${isProcessing ? "pointer-events-none opacity-90" : ""}
       `}
     >
       <input {...getInputProps()} />
 
       {isProcessing ? (
-        <>
-          {/* Subtle thin spinner */}
-          <div className="w-8 h-8 border-2 border-outline-variant border-t-primary rounded-full animate-spin" />
+        <div className="w-full max-w-md flex flex-col gap-5 px-8">
           <div className="text-center">
             <p className="text-[15px] font-medium text-on-surface">
-              Processing CT scan...
+              {STEPS[currentStep]}
             </p>
-            <p className="text-sm text-on-surface-variant mt-1">
-              Running AI inference
+            <p className="text-xs text-on-surface-variant mt-1 font-mono">
+              {Math.floor(progress)}%
             </p>
           </div>
-        </>
+
+          <div className="w-full h-1 bg-surface-variant rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary transition-all duration-100 ease-linear"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            {STEPS.map((step, i) => (
+              <div
+                key={step}
+                className={`text-xs font-mono ${
+                  i < currentStep
+                    ? "text-on-surface-variant"
+                    : i === currentStep
+                      ? "text-primary"
+                      : "text-outline"
+                }`}
+              >
+                {i < currentStep ? "✓" : i === currentStep ? "●" : "○"}{" "}
+                {step}
+              </div>
+            ))}
+          </div>
+        </div>
       ) : isDragActive ? (
         <>
           <FileCheck className="w-10 h-10 text-clinical-amber" />
