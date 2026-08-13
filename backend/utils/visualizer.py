@@ -66,7 +66,7 @@ def generate_multi_organ_overlay(
             if organ_mask.any():
                 overlay = np.zeros((*m.shape, 4))
                 overlay[organ_mask] = [*color, 0.45]
-                ax.imshow(overlay.T, origin="lower")
+                ax.imshow(np.transpose(overlay, (1, 0, 2)), origin="lower")
 
         ax.axis("off")
         plt.tight_layout(pad=0)
