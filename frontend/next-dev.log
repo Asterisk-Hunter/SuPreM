@@ -4,3 +4,19 @@
 ✓ Ready in 1739ms
 ✓ Running next.config.ts took 40ms
 
+○ Compiling / ...
+ GET / 200 in 4.9s (next.js: 4.4s, application-code: 548ms)
+ GET / 200 in 81ms (next.js: 10ms, application-code: 71ms)
+ GET / 200 in 65ms (next.js: 41ms, application-code: 25ms)
+ GET / 200 in 45ms (next.js: 7ms, application-code: 38ms)
+ GET / 200 in 19ms (next.js: 10ms, application-code: 9ms)
+ GET / 200 in 19ms (next.js: 3ms, application-code: 16ms)
+ GET / 200 in 21ms (next.js: 10ms, application-code: 11ms)
+ GET / 200 in 36ms (next.js: 7ms, application-code: 29ms)
+ GET / 200 in 25ms (next.js: 9ms, application-code: 16ms)
+ GET / 200 in 30ms (next.js: 5ms, application-code: 25ms)
+ GET / 200 in 16ms (next.js: 3ms, application-code: 13ms)
+ GET / 200 in 29ms (next.js: 4ms, application-code: 25ms)
+ GET / 200 in 46ms (next.js: 13ms, application-code: 34ms)
+✓ Compiled in 141ms
+ GET / 200 in 58ms (next.js: 16ms, application-code: 42ms)
