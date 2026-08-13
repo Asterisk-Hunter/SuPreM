@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #fdf8f8;
+  --color-surface: #fdf8f8;
+  --color-surface-container: #f1edec;
+  --color-surface-container-low: #f7f3f2;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-high: #ebe7e6;
+  --color-surface-container-highest: #e5e2e1;
+  --color-surface-dim: #ddd9d8;
+  --color-surface-variant: #e5e2e1;
+  --color-on-surface: #1c1b1b;
+  --color-on-surface-variant: #444748;
+  --color-primary: #000000;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #1c1b1b;
+  --color-on-primary-container: #858383;
+  --color-secondary: #5f5e5e;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #e4e2e1;
+  --color-on-secondary-container: #656464;
+  --color-outline: #747878;
+  --color-outline-variant: #c4c7c7;
+  --color-inverse-surface: #313030;
+  --color-inverse-on-surface: #f4f0ef;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-viewport-bg: #1A1A1A;
+  --color-clinical-amber: #F59E0B;
+  --color-surface-tint: #5f5e5e;
+  --color-on-background: #1c1b1b;
+  --font-sans: "Inter", var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", var(--font-geist-mono), monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-on-surface);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-outline-variant);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-outline);
+}
+
+.hairline-border {
+  border: 1px solid #E5E3E0;
+}
+
+.film-strip::-webkit-scrollbar {
+  height: 4px;
+}
+
+.film-strip::-webkit-scrollbar-track {
+  background: #1A1A1A;
+}
+
+.film-strip::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 0;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.25s ease-out forwards;
+}

@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.pth
+backend/output/
+backend/*.log
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+
+# OS
+__MACOSX/
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# AI tool files
+AGENTS.md
+CLAUDE.md
+frontend/AGENTS.md
+frontend/CLAUDE.md
+frontend/next-dev.log
+
+# Data (large files - keep out of git)
+BDMAP_00000338/
+*.pth
+SuPreM/direct_inference/pretrained_checkpoints/
+
+# Misc
+PROJECT_PLAN.md
+session_handover.md
