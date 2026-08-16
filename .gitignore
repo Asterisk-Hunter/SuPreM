@@ -7,6 +7,7 @@ __pycache__/
 backend/output/
 backend/results/
 backend/*.log
+backend/uploads/
 
 # Next.js
 frontend/.next/

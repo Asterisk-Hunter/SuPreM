@@ -4,6 +4,7 @@ CT Scan AI Inference API
 A clean, async API for running AI inference on medical CT scans.
 """
 
+import io
 import os
 import tempfile
 import zipfile
@@ -13,7 +14,7 @@ import nibabel as nib
 import numpy as np
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from utils.suprem_engine import SuPreMEngine, ORGAN_NAMES
 
@@ -78,6 +79,193 @@ async def health():
 
 
 # ---------------------------------------------------------------------------
+# Volume Data Endpoint (for 3D rendering)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/volume/{case_name}")
+async def get_volume_data(case_name: str):
+    """Return CT volume and mask as .npy files for 3D rendering."""
+    case_result_dir = RESULT_DIR / case_name
+    volume_path = case_result_dir / "volume.npy"
+    mask_path = case_result_dir / "mask.npy"
+
+    if not volume_path.exists() or not mask_path.exists():
+        raise HTTPException(404, "Volume data not found. Run inference first.")
+
+    volume = np.load(str(volume_path))
+    mask = np.load(str(mask_path))
+
+    # Save as a combined .npz file for efficient transfer
+    buf = io.BytesIO()
+    np.savez_compressed(buf, volume=volume, mask=mask)
+    buf.seek(0)
+
+    return StreamingResponse(
+        iter([buf.read()]),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename={case_name}_volume.npz"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Mesh Data Endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/mesh/{case_name}")
+async def get_mesh_data(case_name: str):
+    """Return 3D meshes of segmented organs."""
+    case_result_dir = RESULT_DIR / case_name
+    mask_path = case_result_dir / "mask.npy"
+    spacing_path = case_result_dir / "spacing.npy"
+    meshes_dir = case_result_dir / "meshes"
+    cached_mesh_path = meshes_dir / "meshes.npz"
+
+    if not mask_path.exists():
+        raise HTTPException(404, "Mask data not found. Run inference first.")
+
+    # Check for cached meshes
+    if cached_mesh_path.exists():
+        # Verify cache has metadata (added in v2)
+        try:
+            with np.load(str(cached_mesh_path), allow_pickle=False) as data:
+                if '_meta_spacing' not in data:
+                    # Old cache format without metadata, regenerate
+                    pass
+                else:
+                    buf = io.BytesIO(cached_mesh_path.read_bytes())
+                    buf.seek(0)
+                    return StreamingResponse(
+                        iter([buf.read()]),
+                        media_type="application/octet-stream",
+                        headers={"Content-Disposition": f"attachment; filename={case_name}_meshes.npz"},
+                    )
+        except Exception:
+            pass  # Corrupted cache, regenerate
+
+    mask = np.load(str(mask_path))
+    
+    # Try to load spacing
+    if spacing_path.exists():
+        spacing = tuple(np.load(str(spacing_path)).tolist())
+    else:
+        # Fallback to combined_labels.nii.gz
+        combined_path = case_result_dir / "combined_labels.nii.gz"
+        if combined_path.exists():
+            nii = nib.load(str(combined_path))
+            spacing = tuple(map(float, nii.header.get_zooms()[:3]))
+        else:
+            spacing = (1.0, 1.0, 1.0)
+            
+    from utils.mesh_generator import generate_organ_meshes, compute_volume_metadata
+    meshes = generate_organ_meshes(mask, spacing)
+    
+    # Compute volume metadata for frontend slice plane positioning
+    metadata = compute_volume_metadata(mask, spacing)
+    
+    # Save cache and return
+    meshes_dir.mkdir(exist_ok=True)
+    
+    save_dict = {}
+    organ_names = list(meshes.keys())
+    save_dict["organ_names"] = np.array(organ_names, dtype=str)
+    
+    if metadata:
+        save_dict["_meta_spacing"] = metadata["spacing"]
+        save_dict["_meta_volume_shape"] = metadata["volume_shape"]
+        save_dict["_meta_global_center"] = metadata["global_center"]
+    
+    for organ_name, data in meshes.items():
+        save_dict[f"{organ_name}_vertices"] = data["vertices"]
+        save_dict[f"{organ_name}_faces"] = data["faces"]
+        save_dict[f"{organ_name}_normals"] = data["normals"]
+        
+    np.savez_compressed(str(cached_mesh_path), **save_dict)
+    
+    buf = io.BytesIO(cached_mesh_path.read_bytes())
+    buf.seek(0)
+    
+    return StreamingResponse(
+        iter([buf.read()]),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename={case_name}_meshes.npz"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# CT Slice Endpoint (for 3D slice plane texture)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/ct-slice/{case_name}/{slice_index}")
+async def get_ct_slice(case_name: str, slice_index: int):
+    """Return a single CT slice as a grayscale PNG for 3D slice plane texture."""
+    volume_path = RESULT_DIR / case_name / "volume.npy"
+    if not volume_path.exists():
+        raise HTTPException(404, "Volume data not found. Run inference first.")
+
+    volume = np.load(str(volume_path))
+    max_slice = volume.shape[2] - 1
+
+    if slice_index < 0 or slice_index > max_slice:
+        raise HTTPException(
+            400, f"Slice index {slice_index} out of range (0-{max_slice})"
+        )
+
+    ct_slice = volume[:, :, slice_index]
+
+    # Window to soft-tissue range and normalize to 0-255
+    ct_display = np.clip(ct_slice, -175, 250)
+    ct_display = ((ct_display - (-175)) / (250 - (-175)) * 255).astype(np.uint8)
+
+    # Match 3D plane orientation: i (columns) corresponds to X, j (rows) corresponds to Y.
+    # We transpose so i is columns, then flipud so j=0 is at the bottom.
+    ct_oriented = np.flipud(ct_display.T)
+
+    from PIL import Image
+    img = Image.fromarray(ct_oriented, mode="L")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@app.get("/api/volume-info/{case_name}")
+async def get_volume_info(case_name: str):
+    """Return volume metadata (dimensions, spacing) for the 3D viewer."""
+    case_result_dir = RESULT_DIR / case_name
+    volume_path = case_result_dir / "volume.npy"
+    spacing_path = case_result_dir / "spacing.npy"
+
+    if not volume_path.exists():
+        raise HTTPException(404, "Volume data not found. Run inference first.")
+
+    volume = np.load(str(volume_path))
+    
+    if spacing_path.exists():
+        spacing = np.load(str(spacing_path)).tolist()
+    else:
+        combined_path = case_result_dir / "combined_labels.nii.gz"
+        if combined_path.exists():
+            nii = nib.load(str(combined_path))
+            spacing = list(map(float, nii.header.get_zooms()[:3]))
+        else:
+            spacing = [1.0, 1.0, 1.0]
+
+    return {
+        "volume_shape": list(volume.shape),
+        "spacing": spacing[:3],
+        "total_slices": int(volume.shape[2]),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Inference Endpoint
 # ---------------------------------------------------------------------------
 
@@ -133,6 +321,11 @@ async def run_inference(file: UploadFile = File(...)):
         segmentations_dir = case_result_dir / "segmentations"
         segmentations_dir.mkdir(parents=True, exist_ok=True)
 
+        # Save volume and mask as .npy for 3D rendering
+        np.save(str(case_result_dir / "volume.npy"), volume.astype(np.float32))
+        np.save(str(case_result_dir / "mask.npy"), mask.astype(np.uint8))
+        np.save(str(case_result_dir / "spacing.npy"), np.array(spacing, dtype=np.float64))
+
         # Save combined labels
         combined_path = case_result_dir / "combined_labels.nii.gz"
         combined_nii = nib.Nifti1Image(mask.astype(np.uint8), nii.affine)
@@ -155,7 +348,7 @@ async def run_inference(file: UploadFile = File(...)):
 
         # ── Generate visualizations ──────────────────────────────────
         from utils.visualizer import generate_multi_organ_overlay
-        slices = generate_multi_organ_overlay(volume, mask, num_slices=10)
+        viz = generate_multi_organ_overlay(volume, mask, num_slices=10)
 
         # ── Compute statistics ───────────────────────────────────────
         stats = {
@@ -174,7 +367,9 @@ async def run_inference(file: UploadFile = File(...)):
             "detected_organs": organ_names,
             "organ_files": organ_files,
             "statistics": stats,
-            "slice_images": slices,
+            "ct_images": viz["ct_images"],
+            "organ_overlays": viz["organ_overlays"],
+            "organ_ids": viz["organ_ids"],
             "download_url": f"/api/download/{case_name}",
         }
 

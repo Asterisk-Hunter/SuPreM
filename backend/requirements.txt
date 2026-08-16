@@ -16,3 +16,4 @@ monai>=1.3.0
 connected-components-3d>=3.0.0
 fastremap>=2.0.0
 pandas>=2.0.0
+scikit-image>=0.22.0

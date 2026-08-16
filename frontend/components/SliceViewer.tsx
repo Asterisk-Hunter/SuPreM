@@ -4,39 +4,36 @@ import { useState, useCallback, useEffect } from "react";
 import { SliceImage } from "@/lib/api";
 
 interface Props {
-  slices: SliceImage[];
+  ctImages: SliceImage[];
+  organOverlays: Record<string, SliceImage[]>;
+  activeOrgans: Set<string>;
   activeSlice: number;
   onSliceChange: (idx: number) => void;
+  overlayOpacity?: number;
 }
 
 export default function SliceViewer({
-  slices,
+  ctImages,
+  organOverlays,
+  activeOrgans,
   activeSlice,
   onSliceChange,
+  overlayOpacity = 0.45,
 }: Props) {
-  const total = slices.length;
+  const total = ctImages.length;
 
-  const prev = useCallback(
-    () => onSliceChange(Math.max(0, activeSlice - 1)),
-    [activeSlice, onSliceChange],
-  );
-  const next = useCallback(
-    () => onSliceChange(Math.min(total - 1, activeSlice + 1)),
-    [activeSlice, total, onSliceChange],
-  );
+  if (!ctImages.length) return null;
 
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") prev();
-      if (e.key === "ArrowRight") next();
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [prev, next]);
+  const currentCt = ctImages[activeSlice];
 
-  if (!slices.length) return null;
-
-  const current = slices[activeSlice];
+  // Collect active organ overlay images for this slice
+  const activeOverlays: { name: string; image: string }[] = [];
+  for (const organName of activeOrgans) {
+    const overlays = organOverlays[organName];
+    if (overlays && overlays[activeSlice]) {
+      activeOverlays.push({ name: organName, image: overlays[activeSlice].image });
+    }
+  }
 
   return (
     <section className="flex-1 bg-viewport-bg flex flex-col relative hairline-border border-outline-variant">
@@ -64,18 +61,29 @@ export default function SliceViewer({
         <div className="w-4 h-4 border border-clinical-amber rounded-full" />
       </div>
 
-      {/* CT Image */}
+      {/* CT Image + Organ Overlays */}
       <div className="flex-1 relative overflow-hidden flex items-center justify-center p-8">
+        {/* CT base image */}
         <img
-          src={`data:image/png;base64,${current.image}`}
-          alt={`CT slice ${current.slice_index}`}
+          src={`data:image/png;base64,${currentCt.image}`}
+          alt={`CT slice ${currentCt.slice_index}`}
           className="max-w-full max-h-full object-contain relative z-0 mix-blend-screen opacity-90"
         />
+        {/* Organ overlays stacked on top */}
+        {activeOverlays.map((overlay) => (
+          <img
+            key={overlay.name}
+            src={`data:image/png;base64,${overlay.image}`}
+            alt={`${overlay.name} overlay`}
+            className="absolute inset-0 w-full h-full object-contain z-10 pointer-events-none mix-blend-screen"
+            style={{ opacity: overlayOpacity }}
+          />
+        ))}
       </div>
 
       {/* Film strip */}
       <div className="h-20 bg-[#111] border-t border-[#333] flex items-center px-2 z-20 film-strip overflow-x-auto gap-1 py-1">
-        {slices.map((s, i) => (
+        {ctImages.map((s, i) => (
           <button
             key={i}
             onClick={() => onSliceChange(i)}
@@ -92,8 +100,8 @@ export default function SliceViewer({
               {s.slice_index}
             </span>
             <img
-              src={`data:image/png;base64,${s.image}`}
-              alt={`Slice ${s.slice_index}`}
+              src={`data:image/png;base64,${ctImages[i].image}`}
+              alt={`Slice ${ctImages[i].slice_index}`}
               className="w-full h-full object-cover rounded-sm"
             />
           </button>

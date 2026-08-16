@@ -46,7 +46,7 @@ export default function StatsPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
-        {/* Detected Organs */}
+        {/* Detected Organs (read-only list) */}
         <section className="flex flex-col gap-2">
           <h3 className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant border-b border-outline-variant pb-1">
             DETECTED ORGANS ({detectedOrgans.length})
@@ -55,7 +55,7 @@ export default function StatsPanel({
             {organFiles.map((organ) => (
               <div
                 key={organ.filename}
-                className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-surface-container-high transition-colors group"
+                className="flex items-center justify-between py-1.5 px-2 rounded"
               >
                 <div className="flex items-center gap-2">
                   <div

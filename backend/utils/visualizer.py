@@ -1,7 +1,7 @@
 """
 Visualizer
 ==========
-Generate slice-by-slice images with multi-organ segmentation overlay.
+Generate slice-by-slice CT images and per-organ overlay images.
 """
 
 import base64
@@ -35,50 +35,88 @@ ORGAN_NAMES = [
 ]
 
 
+def _render_ct_slice(ct: np.ndarray) -> bytes:
+    """Render a single CT slice as PNG bytes (grayscale, windowed)."""
+    fig, ax = plt.subplots(1, 1, figsize=(6, 6), dpi=100)
+    ct_display = np.clip(ct, -175, 250)
+    ct_display = (ct_display - (-175)) / (250 - (-175))
+    ax.imshow(ct_display.T, cmap="gray", origin="lower")
+    ax.axis("off")
+    plt.tight_layout(pad=0)
+    buf = BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", facecolor="black", pad_inches=0)
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
+
+
+def _render_organ_overlay(m: np.ndarray, organ_id: int, color: tuple) -> bytes:
+    """Render a single organ overlay as PNG bytes (RGBA on black)."""
+    fig, ax = plt.subplots(1, 1, figsize=(6, 6), dpi=100)
+    ax.set_facecolor("black")
+    overlay = np.zeros((*m.shape, 4))
+    organ_mask = (m == organ_id)
+    overlay[organ_mask] = [*color, 0.45]
+    ax.imshow(np.transpose(overlay, (1, 0, 2)), origin="lower")
+    ax.axis("off")
+    plt.tight_layout(pad=0)
+    buf = BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", facecolor="black", pad_inches=0)
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
+
+
 def generate_multi_organ_overlay(
     volume: np.ndarray,
     mask: np.ndarray,
     num_slices: int = 10,
-) -> list[dict]:
+) -> dict:
     """
-    Create CT slice images with colored multi-organ overlay.
+    Create CT slice images and per-organ overlay images.
 
-    Returns a list of dicts with slice_index and base64-encoded PNG.
+    Returns:
+        {
+            "ct_images": [{"slice_index": int, "image": base64}],
+            "organ_overlays": {
+                "Spleen": [{"slice_index": int, "image": base64}],
+                ...
+            },
+            "organ_ids": {"Spleen": 1, ...}
+        }
     """
     depth = volume.shape[2]
     indices = np.linspace(0, depth - 1, num_slices, dtype=int)
-    images = []
+
+    ct_images = []
+    organ_overlays: dict[str, list[dict]] = {name: [] for name in ORGAN_NAMES}
+    organ_ids: dict[str, int] = {}
+
+    for organ_id, color in ORGAN_COLORS.items():
+        organ_ids[ORGAN_NAMES[organ_id - 1]] = organ_id
 
     for idx in indices:
         ct = volume[:, :, idx]
         m = mask[:, :, idx]
 
-        fig, ax = plt.subplots(1, 1, figsize=(6, 6), dpi=100)
-
-        # CT slice (windowed for soft tissue)
-        ct_display = np.clip(ct, -175, 250)
-        ct_display = (ct_display - (-175)) / (250 - (-175))
-        ax.imshow(ct_display.T, cmap="gray", origin="lower")
-
-        # Overlay each organ with its color
-        for organ_id, color in ORGAN_COLORS.items():
-            organ_mask = (m == organ_id)
-            if organ_mask.any():
-                overlay = np.zeros((*m.shape, 4))
-                overlay[organ_mask] = [*color, 0.45]
-                ax.imshow(np.transpose(overlay, (1, 0, 2)), origin="lower")
-
-        ax.axis("off")
-        plt.tight_layout(pad=0)
-
-        buf = BytesIO()
-        fig.savefig(buf, format="png", bbox_inches="tight", facecolor="black", pad_inches=0)
-        plt.close(fig)
-        buf.seek(0)
-
-        images.append({
+        # CT image
+        ct_png = _render_ct_slice(ct)
+        ct_images.append({
             "slice_index": int(idx),
-            "image": base64.b64encode(buf.read()).decode("utf-8"),
+            "image": base64.b64encode(ct_png).decode("utf-8"),
         })
 
-    return images
+        # Per-organ overlays
+        for organ_id, color in ORGAN_COLORS.items():
+            organ_name = ORGAN_NAMES[organ_id - 1]
+            overlay_png = _render_organ_overlay(m, organ_id, color)
+            organ_overlays[organ_name].append({
+                "slice_index": int(idx),
+                "image": base64.b64encode(overlay_png).decode("utf-8"),
+            })
+
+    return {
+        "ct_images": ct_images,
+        "organ_overlays": organ_overlays,
+        "organ_ids": organ_ids,
+    }

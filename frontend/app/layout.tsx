@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SCAN_ARCHITECT_V1 — Medical Imaging",
+  title: "SuPreM",
   description: "AI-powered CT scan analysis and diagnostic reporting",
 };
 
